@@ -1,6 +1,8 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import com.fazecast.jSerialComm.SerialPort;
 
@@ -47,27 +49,30 @@ public class OpenMV{
             if(port.getPortDescription().contains("OpenMV")){
                 System.out.println(port.getPortDescription());
                 connection = port;
+                break;
             }
         }
         connection.setBaudRate(baudRate);
         connection.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, timeout, timeout);
         connection.openPort();
-        System.out.println(connection.isOpen());
-        System.out.println(this.read(10));
+        //System.out.println(connection.isOpen());
     }
 
     public static void main(String[] args) throws Exception {
-        OpenMV openMV = new OpenMV( 921600, 0);
+        OpenMV openMV = new OpenMV( 921600, 3);
         openMV.enableFb(5);
+        //openMV.execScript(Files.readAllBytes(Paths.get("test.py")));
+        System.out.println(openMV.scriptRunning());
         while(true){
+
             Thread.sleep(20);
             openMV.fbDump("test.jpg");
+            //System.out.println(new String(openMV.txBuf(openMV.txBufLen())));
         }
         
     }
 
     private void write(byte[] bytes) {
-        //printStringByteBuffer(bytes);
         connection.writeBytes(bytes, bytes.length);
     }
 
@@ -114,14 +119,14 @@ public class OpenMV{
         write(struct.pack("<II", BOOTLDR_ERASE, sector));
     }
 
-    public long txBufLen() throws Exception {
+    public int txBufLen() throws Exception {
         write(struct.pack("<BBI", USBDBG_CMD, USBDBG_TX_BUF_LEN, 4));
-        return struct.unpack("I", read(4))[0];
+        return (int)struct.unpack("I", read(4))[0];
     }
 
-    public byte[] txBuf(byte bytes) throws Exception {
-        write(struct.pack("<BBI", USBDBG_CMD, USBDBG_TX_BUF, bytes));
-        return read(bytes);
+    public byte[] txBuf(int i) throws Exception {
+        write(struct.pack("<BBI", USBDBG_CMD, USBDBG_TX_BUF, i));
+        return read(i);
     }
 
     public long[] fwVersion() throws Exception {
@@ -136,21 +141,17 @@ public class OpenMV{
 
     public void fbDump(String s) throws Exception {
         long[] size = fbSize();
-        
         if (size[0] == 0){
             return;
         }
+        System.out.println("Here!");
         long numBytes = 0;
         if (size[2] > 2){ //JPEG
             numBytes = size[2];
         }
-        else
-            numBytes = size[0]*size[1]*size[2];
-
         // read fb data
         write(struct.pack("<BBI", (long)USBDBG_CMD, (long)USBDBG_FRAME_DUMP, numBytes));
         byte[] buff = read((int)numBytes);
-
         FileOutputStream output = new FileOutputStream(new File(s));
         output.write(buff);
         output.close();
